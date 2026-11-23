@@ -1,0 +1,53 @@
+{
+  "id": "vantry-remote-desktop",
+  "name": "远程桌面",
+  "version": "0.2.3",
+  "minAppVersion": "0.1.13",
+  "description": "通过局域网连接另一台电脑；跨网络可配置自己的中继。原生 H.264 视频、键鼠与按需授权。Windows 实现预览。",
+  "main": "index.ts",
+  "repo": "muq9738/vantry-plugin-remote-desktop",
+  "settings": [
+    {
+      "key": "defaultQuality",
+      "label": "默认画质",
+      "type": "select",
+      "default": "balanced",
+      "options": [
+        {
+          "value": "ultra",
+          "label": "高清原画"
+        },
+        {
+          "value": "balanced",
+          "label": "均衡流畅"
+        },
+        {
+          "value": "low",
+          "label": "省流"
+        }
+      ]
+    },
+    {
+      "key": "defaultRelayHost",
+      "label": "自建中继",
+      "help": "可选，填写你自己的中继 SSH 主机别名；留空仅使用局域网。两端分别使用本机已有配置。",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "key": "sshConfigFile",
+      "label": "SSH 配置文件",
+      "help": "本机 OpenSSH 配置路径；留空使用已有配置。每台机器分别读取自己的文件。",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "navigation": [
+    {
+      "title": "远程桌面",
+      "page": "dashboard",
+      "icon": "monitor",
+      "nativePanel": "remote-desktop"
+    }
+  ]
+}

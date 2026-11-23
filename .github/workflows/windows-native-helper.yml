@@ -1,0 +1,59 @@
+# Copy to .github/workflows/windows-native-helper.yml AFTER importing delivery to native/windows.
+# This template is not registered or pushed by the implementation sub-agent.
+name: Windows native media helper
+on:
+  push:
+    paths: ['native/windows/**', '.github/workflows/windows-native-helper.yml']
+  pull_request:
+    paths: ['native/windows/**', '.github/workflows/windows-native-helper.yml']
+  workflow_dispatch:
+    inputs:
+      run_gpu_acceptance:
+        description: 'Also run strict synthetic hardware acceptance on a private self-hosted GPU runner'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  WINDOWS_NATIVE_DIR: native/windows
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build AMD64 and run protocol tests
+        shell: pwsh
+        run: |
+          & "$env:WINDOWS_NATIVE_DIR/build.ps1" -RunAcceptance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s "$env:WINDOWS_NATIVE_DIR/tests" -p 'test_*.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-amd64-media-helper
+          path: |
+            native/windows/build/Release/vantry-remote-helper.exe
+            native/windows/build/acceptance/**
+          retention-days: 14
+  hardware:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_gpu_acceptance
+    runs-on: [self-hosted, Windows, X64, vantry-media-gpu]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require real encoder and decoder; no capture
+        shell: pwsh
+        run: |
+          & "$env:WINDOWS_NATIVE_DIR/build.ps1" -RunAcceptance -RequireHardware
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-gpu-synthetic-acceptance
+          path: native/windows/build/acceptance/**
+          retention-days: 14

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Vantry 远程桌面</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#101318;color:#edf0f5}*{box-sizing:border-box}body{margin:0;height:100dvh;display:flex;flex-direction:column;overflow:hidden}header{display:flex;align-items:center;gap:12px;padding:12px max(14px,env(safe-area-inset-right)) 12px max(14px,env(safe-area-inset-left));background:#191f28;border-bottom:1px solid #303a48}strong{font-size:15px}#status{flex:1;color:#a8b7cc;font-size:12px}button{font:inherit;background:#27374d;color:#edf0f5;border:1px solid #455b77;border-radius:8px;padding:8px 12px;min-height:42px;cursor:pointer}button:focus-visible,#screen:focus-visible{outline:2px solid #82b6ff;outline-offset:2px}#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:6px}#screen{max-width:100%;max-height:100%;object-fit:contain;touch-action:none;user-select:none;-webkit-user-select:none}footer{padding:8px 14px max(8px,env(safe-area-inset-bottom));font-size:12px;color:#a8b7cc}#typing{position:fixed;left:12px;bottom:36px;width:min(360px,90vw);font:16px system-ui;padding:10px;border:1px solid #82b6ff;border-radius:8px;background:#191f28;color:white}#typing[hidden]{display:none}@media(max-width:480px){header{gap:8px}#status{font-size:11px}button{font-size:13px;padding:8px}footer{font-size:11px}}
+</style>
+</head>
+<body>
+<header><strong>Vantry 远程桌面</strong><span id="status" role="status" aria-live="polite">正在连接…</span><button id="keyboard" aria-label="打开触摸键盘">键盘</button><button id="right" aria-pressed="false">右键</button></header>
+<main id="stage"><img id="screen" tabindex="0" draggable="false" alt="远程桌面实时画面"></main>
+<input id="typing" hidden autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="向远程桌面输入文字" placeholder="输入文字，回车换行">
+<footer>单指点击或拖动 · 双指滚动 · 支持鼠标和键盘</footer>
+<script>
+'use strict';
+const session = {{.Session}}, token = {{.Token}};
+const screen = document.getElementById('screen'), status = document.getElementById('status'), typing = document.getElementById('typing');
+const base = '../', auth = {Authorization:'Bearer '+token,'Content-Type':'application/json'};
+screen.src = base+'mjpeg/'+encodeURIComponent(session)+'?token='+encodeURIComponent(token);
+screen.onload = () => {status.textContent='已连接';};
+screen.onerror = () => {status.textContent='连接中断，请刷新重试';};
+let queue=Promise.resolve(), pending=0, right=false, pressed=false, pressedButton=0;
+function send(event){
+  if(pending>5 && event.type==='mouse' && (event.kind==='move'||event.kind==='drag')) return;
+  pending++;
+  queue=queue.then(async()=>{const res=await fetch(base+'input/'+encodeURIComponent(session),{method:'POST',headers:auth,body:JSON.stringify(event),cache:'no-store',credentials:'omit'});if(!res.ok)throw new Error('input');status.textContent='已连接';}).catch(()=>{status.textContent='输入发送失败';}).finally(()=>{pending--;});
+}
+function coords(e){const r=screen.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
+function mouse(kind,e,button=pressedButton){send({type:'mouse',kind,...coords(e),button});}
+const pointers=new Map();
+screen.addEventListener('contextmenu',e=>e.preventDefault());
+screen.addEventListener('pointerdown',e=>{e.preventDefault();screen.focus();screen.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){pressedButton=right?1:(e.button===1?2:e.button===2?1:0);pressed=true;mouse('down',e);}else if(pressed){mouse('up',e);pressed=false;}});
+screen.addEventListener('pointermove',e=>{if(pointers.has(e.pointerId)){const old=pointers.get(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size>1){send({type:'wheel',dx:Math.max(-32767,Math.min(32767,(old.x-e.clientX)/2)),dy:Math.max(-32767,Math.min(32767,(old.y-e.clientY)/2))});return;}}if(e.pointerType==='mouse'||pressed)mouse(pressed?'drag':'move',e);});
+function release(e){if(pressed){mouse('up',e);pressed=false;}pointers.delete(e.pointerId);}
+screen.addEventListener('pointerup',release);screen.addEventListener('pointercancel',release);screen.addEventListener('lostpointercapture',release);
+screen.addEventListener('wheel',e=>{e.preventDefault();const unit=e.deltaMode===1?16:e.deltaMode===2?screen.clientHeight:1;send({type:'wheel',dx:Math.max(-32767,Math.min(32767,e.deltaX*unit)),dy:Math.max(-32767,Math.min(32767,e.deltaY*unit))});},{passive:false});
+document.getElementById('right').onclick=e=>{right=!right;e.target.setAttribute('aria-pressed',String(right));screen.focus();};
+document.getElementById('keyboard').onclick=()=>{typing.hidden=!typing.hidden;if(!typing.hidden)typing.focus();else screen.focus();};
+const codes={KeyA:0,KeyS:1,KeyD:2,KeyF:3,KeyH:4,KeyG:5,KeyZ:6,KeyX:7,KeyC:8,KeyV:9,KeyB:11,KeyQ:12,KeyW:13,KeyE:14,KeyR:15,KeyY:16,KeyT:17,Digit1:18,Digit2:19,Digit3:20,Digit4:21,Digit6:22,Digit5:23,Equal:24,Digit9:25,Digit7:26,Minus:27,Digit8:28,Digit0:29,BracketRight:30,KeyO:31,KeyU:32,BracketLeft:33,KeyI:34,KeyP:35,Enter:36,KeyL:37,KeyJ:38,Quote:39,KeyK:40,Semicolon:41,Backslash:42,Comma:43,Slash:44,KeyN:45,KeyM:46,Period:47,Tab:48,Space:49,Backquote:50,Backspace:51,Escape:53,MetaRight:54,MetaLeft:55,ShiftLeft:56,CapsLock:57,AltLeft:58,ControlLeft:59,ShiftRight:60,AltRight:61,ControlRight:62,F5:96,F6:97,F7:98,F3:99,F8:100,F9:101,F11:103,F10:109,F12:111,Home:115,PageUp:116,Delete:117,F4:118,End:119,F2:120,PageDown:121,F1:122,ArrowLeft:123,ArrowRight:124,ArrowDown:125,ArrowUp:126};
+function modifiers(e){return (e.shiftKey?1<<17:0)|(e.ctrlKey?1<<18:0)|(e.altKey?1<<19:0)|(e.metaKey?1<<20:0)|(e.getModifierState('CapsLock')?1<<16:0);}
+const keys=new Map();
+function key(e,kind){if(e.isComposing)return;const code=codes[e.code];if(code===undefined)return;e.preventDefault();const text=kind==='down'&&e.key.length===1&&!e.ctrlKey&&!e.metaKey?e.key:'';send({type:'key',kind,keyCode:code,text,modifiers:modifiers(e)});if(kind==='down')keys.set(e.code,code);else keys.delete(e.code);}
+screen.addEventListener('keydown',e=>key(e,'down'));screen.addEventListener('keyup',e=>key(e,'up'));
+screen.addEventListener('blur',()=>{for(const code of keys.values())send({type:'key',kind:'up',keyCode:code,modifiers:0});keys.clear();if(pressed){send({type:'mouse',kind:'up',x:.5,y:.5,button:pressedButton});pressed=false;}});
+function text(value){if(!value)return;for(const chunk of Array.from(value).reduce((out,ch)=>{if(!out.length||out[out.length-1].length>500)out.push('');out[out.length-1]+=ch;return out;},[])){send({type:'key',kind:'down',keyCode:0,text:chunk});send({type:'key',kind:'up',keyCode:0});}}
+typing.addEventListener('input',e=>{if(e.isComposing)return;text(typing.value);typing.value='';});
+typing.addEventListener('compositionend',()=>{text(typing.value);typing.value='';});
+typing.addEventListener('keydown',e=>{if(e.isComposing)return;if(e.key==='Enter'||e.key==='Backspace'){e.preventDefault();const keyCode=e.key==='Enter'?36:51;send({type:'key',kind:'down',keyCode});send({type:'key',kind:'up',keyCode});}});
+</script>
+</body>
+</html>

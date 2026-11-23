@@ -1,0 +1,36 @@
+name: Validate remote desktop
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./... -timeout=120s
+      - run: go vet ./...
+      - run: go test -race ./... -timeout=120s
+        working-directory: relayrtc
+      - run: go vet ./...
+        working-directory: relayrtc
+      - if: runner.os == 'macOS'
+        run: ./native/build.sh
+  windows-input:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test . -run '^TestWindowsInput' -count=1 -v
+      - run: go test ./rtc -run '^Test(Permission|H264|NativeFraming)' -count=1 -v
+      - run: go vet ./...
+      - run: go test -c ./rtc -o rtc-windows.test.exe
